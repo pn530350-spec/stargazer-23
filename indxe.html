@@ -1,0 +1,1844 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#04060c">
+<title>Sky VR · Shahdol Sky Atlas</title>
+<style>
+  :root{
+    --bg:#04060c; --ink:#e8ecf6; --mute:#8d98b4; --amber:#ffc26b; --line:#2a3552;
+    --glass:rgba(12,17,30,.85); --cyan:#67e8f9; --rose:#fb7185; --violet:#a78bfa;
+    --ai:#7c3aed;
+  }
+  *{box-sizing:border-box}
+  html,body{
+    margin:0;height:100%;background:var(--bg);color:var(--ink);
+    font:15px/1.45 "Avenir Next",system-ui,-apple-system,sans-serif;
+    overflow:hidden;touch-action:none;overscroll-behavior:none;
+    -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;
+  }
+  #gl,#overlay{position:fixed;inset:0;width:100%;height:100%;display:block}
+  #overlay{pointer-events:none}
+  #gl{cursor:crosshair}
+
+  /* ---------- HUD ---------- */
+  #hud{
+    position:fixed;top:calc(env(safe-area-inset-top,0px) + 12px);left:14px;
+    display:flex;gap:14px;pointer-events:none;
+    font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--mute);
+    text-shadow:0 1px 8px #000a; z-index:5; transition:opacity .3s;
+  }
+  #hud div{display:grid;gap:1px}
+  #hud span{opacity:.6}
+  #hud b{color:var(--amber);font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:.06em;font-size:12px;}
+  #brand{
+    position:fixed;top:calc(env(safe-area-inset-top,0px) + 14px);right:16px;
+    font-size:11px;letter-spacing:.42em;color:#ffffff55;pointer-events:none;
+    text-shadow:0 1px 8px #000a; z-index:5;
+  }
+  body.vr #hud, body.vr #brand { opacity: 0; pointer-events: none; }
+
+  /* ---------- Tooltip ---------- */
+  #tooltip{
+    position:fixed;pointer-events:none;z-index:7;
+    background:var(--glass);border:1px solid var(--line);border-radius:12px;
+    padding:8px 12px;font-size:12px;color:var(--ink);max-width:240px;
+    backdrop-filter:blur(14px) saturate(1.3);-webkit-backdrop-filter:blur(14px) saturate(1.3);
+    box-shadow:0 12px 32px -12px #000, inset 0 1px 0 #ffffff12;
+    display:none;transition:opacity .12s; transform: translate(-50%, -100%) translateY(-10px);
+  }
+  #tooltip .tt-name{font-weight:600;color:var(--amber);font-size:13px;letter-spacing:.02em}
+  #tooltip .tt-type{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute);margin-bottom:4px}
+  #tooltip .tt-row{display:flex;justify-content:space-between;gap:12px;font-size:11px;padding:1px 0}
+  #tooltip .tt-row .k{color:var(--mute)}
+  #tooltip .tt-hint{margin-top:6px;font-size:10px;color:var(--mute);font-style:italic}
+
+  /* ---------- Info panel ---------- */
+  #info{
+    position:fixed;right:14px;top:calc(env(safe-area-inset-top,0px) + 54px);
+    width:min(330px,calc(100% - 28px));max-height:calc(100vh - 160px);
+    background:var(--glass);border:1px solid var(--line);border-radius:18px;
+    padding:14px 16px;overflow-y:auto;backdrop-filter:blur(20px) saturate(1.4);
+    -webkit-backdrop-filter:blur(20px) saturate(1.4);
+    box-shadow:0 24px 60px -24px #000, inset 0 1px 0 #ffffff14;
+    z-index:6;display:none;font-size:13px;transition:left .3s,right .3s,top .3s,transform .3s;
+  }
+  #info.open{display:block;animation:slideIn .25s ease}
+  @keyframes slideIn{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:none}}
+  
+  /* In VR, Info panel is centered */
+  body.vr #info{
+    left:50%;right:auto;top:50%;transform:translate(-50%, -50%);
+    width:min(320px, 60vw);max-height: 70vh;animation:fadeIn .2s ease;
+    pointer-events: auto;
+  }
+  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+  
+  #info h2{margin:0 0 2px;font-size:16px;letter-spacing:.04em;color:var(--amber)}
+  #info .sub{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--mute);margin-bottom:10px}
+  #info .close{position:absolute;top:10px;right:12px;background:none;border:0;color:var(--mute);font-size:18px;cursor:pointer;padding:4px}
+  #info .row{display:flex;justify-content:space-between;gap:12px;padding:5px 0;border-bottom:1px solid #ffffff0a}
+  #info .row:last-child{border:0}
+  #info .k{color:var(--mute);font-size:11px;letter-spacing:.06em}
+  #info .v{color:var(--ink);font-weight:600;text-align:right;font-variant-numeric:tabular-nums}
+  #info .desc{margin-top:10px;font-size:12px;color:#b8c2d8;line-height:1.5}
+
+  /* AI block */
+  #ai-block{margin-top:14px;padding-top:14px;border-top:1px solid #ffffff10;}
+  .ai-header{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+  .ai-badge{display:inline-block;padding:2px 7px;border-radius:6px;background:linear-gradient(135deg,#7c3aed,#a78bfa);color:#fff;font-size:9px;font-weight:700;letter-spacing:.15em;}
+  #ai-status{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute)}
+  #ai-content{font-size:12.5px;line-height:1.55;color:#dbe3f0;min-height:32px;padding:4px 0 8px;}
+  .ai-actions{display:flex;gap:6px;align-items:center;margin-top:6px;padding-top:8px;border-top:1px solid #ffffff08;}
+  #btn-mic{width:38px;height:38px;padding:0;flex:none;display:grid;place-items:center;font-size:16px;border-radius:50%;background:linear-gradient(135deg,#7c3aed33,#7c3aed66);border:1px solid #a78bfa88;color:#e8ecf6;}
+  #btn-mic.recording{background:linear-gradient(135deg,#fb7185,#f43f5e);border-color:#fb7185;animation:pulse 1s infinite;}
+  @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+  #ai-input{flex:1;appearance:none;background:#0a1020;color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:8px 11px;font:inherit;font-size:12px;}
+  #ai-input:focus{outline:none;border-color:var(--amber)}
+  #btn-ask{width:38px;height:38px;padding:0;flex:none;display:grid;place-items:center;font-size:16px;border-radius:50%;}
+  .ai-error{color:var(--rose);font-size:11px}
+  .ai-hint{color:var(--mute);font-size:10.5px;font-style:italic}
+
+  /* ---------- Control bar ---------- */
+  #bar{
+    position:fixed;left:0;right:0;bottom:calc(env(safe-area-inset-bottom,0px) + 14px);
+    display:flex;justify-content:center;padding:0 12px;pointer-events:none;z-index:5;
+    transition:opacity .25s, transform .25s;
+  }
+  .panel{
+    pointer-events:auto;display:flex;flex-direction:column;gap:10px;
+    background:var(--glass);border:1px solid var(--line);border-radius:20px;
+    padding:12px 16px;max-width:min(820px,100%);
+    backdrop-filter:blur(18px) saturate(1.3);-webkit-backdrop-filter:blur(18px) saturate(1.3);
+    box-shadow:0 24px 60px -24px #000, inset 0 1px 0 #ffffff14;
+  }
+  
+  /* VR Mode: Floating central menu */
+  body.vr #bar {
+    bottom: auto; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    opacity: 0; pointer-events: none;
+    width: min(420px, 90vw);
+  }
+  body.vr #bar.show { opacity: 1; pointer-events: auto; }
+  body.vr .panel {
+    border-color: var(--amber);
+    background: rgba(12,17,30,.95);
+    padding: 20px; border-radius: 24px;
+  }
+  /* Make buttons massive in VR for easy gaze targeting */
+  body.vr button { padding: 12px 18px; font-size: 15px; margin-bottom: 6px; width: 100%; }
+  body.vr .row { gap: 10px; flex-direction: column; align-items: stretch; }
+  body.vr .row .lab, body.vr .row input[type=range] { display: none; } /* Hide time slider in VR menu */
+  
+  /* VR Close Row */
+  #vr-close-row { display: none; }
+  body.vr #vr-close-row { display: flex !important; margin-top: 10px; }
+  #b-close-vr-menu { background: var(--rose) !important; color: #fff !important; border-color: var(--rose) !important; font-weight: bold; }
+
+  .row{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap}
+  .lab{font-size:10px;letter-spacing:.18em;color:var(--mute)}
+  .clock{color:var(--amber);font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;min-width:46px;text-align:right}
+  
+  button{
+    appearance:none;-webkit-appearance:none;background:#0e1424d9;color:var(--ink);border:1px solid var(--line);border-radius:999px;
+    padding:8px 14px;font:inherit;font-size:13px;letter-spacing:.03em;cursor:pointer;
+    transition:background .18s,border-color .18s,color .18s,transform .12s;
+  }
+  button:hover{background:#161f36;border-color:#3d4b70}
+  button:active{transform:scale(.95)}
+  button:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+  button.on{background:#ffc26b1f;border-color:#ffc26b88;color:var(--amber)}
+  
+  /* VR Gaze Hover Effect */
+  button.vr-gaze {
+    background: #ffc26b44 !important;
+    border-color: var(--amber) !important;
+    color: #fff !important;
+    box-shadow: 0 0 20px #ffc26b66;
+    transform: scale(1.02);
+  }
+
+  input[type=range]{-webkit-appearance:none;appearance:none;background:transparent;flex:1 1 180px;min-width:120px;height:22px;cursor:pointer;}
+  input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:linear-gradient(90deg,#1b2540,#3b4a72 42%,#ffc26b 78%,#2a3552)}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;margin-top:-6px;border-radius:50%;background:var(--amber);box-shadow:0 0 14px #ffc26b99}
+  
+  /* VR Floating Menu Toggle Button */
+  #vr-menu-btn{
+    position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) + 14px);left:50%;transform:translateX(-50%);
+    width:56px;height:56px;border-radius:50%;padding:0;display:none;place-items:center;font-size:24px;z-index:5;
+    background:var(--glass);border:1px solid var(--amber);color:var(--amber);
+  }
+  body.vr #vr-menu-btn{display:grid}
+
+  /* ---------- Modals ---------- */
+  #setup,#settings,#vr-calib{
+    position:fixed;inset:0;z-index:20;display:grid;place-content:center;
+    padding:16px;background:radial-gradient(circle at 50% 44%, #0b1224, #04060c 72%);
+    transition:opacity .4s ease;
+  }
+  #setup.gone,#settings.gone,#vr-calib.gone{opacity:0;pointer-events:none}
+  .box{
+    width:min(440px,100%);background:var(--glass);border:1px solid var(--line);border-radius:22px;
+    padding:22px 24px;backdrop-filter:blur(22px) saturate(1.4);-webkit-backdrop-filter:blur(22px) saturate(1.4);
+    box-shadow:0 32px 80px -32px #000, inset 0 1px 0 #ffffff14;
+  }
+  .box h2{margin:0 0 2px;font-size:14px;letter-spacing:.4em;color:var(--amber);font-weight:600;text-transform:uppercase}
+  .box p.sub{margin:0 0 18px;font-size:11px;letter-spacing:.12em;color:var(--mute);text-transform:uppercase}
+  .fld{display:grid;gap:4px;margin-bottom:12px}
+  .fld > span{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--mute)}
+  .input-row{display:flex;gap:6px}
+  .box input[type=text],.box input[type=number],.box input[type=date],.box input[type=time],.box input[type=password]{
+    flex:1;appearance:none;background:#0a1020;color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:9px 11px;font:inherit;font-size:13px;font-variant-numeric:tabular-nums;
+  }
+  .box input:focus{outline:none;border-color:var(--amber);box-shadow:0 0 0 2px #ffc26b33}
+  .coords{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px}
+  .coords.two{grid-template-columns:1fr 1fr}
+  .coords label{display:grid;gap:4px}
+  .coords label > span{font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--mute)}
+  .actions{display:flex;gap:8px;margin-top:18px;justify-content:space-between;flex-wrap:wrap}
+  .actions button{flex:1;min-width:120px;padding:11px 16px;font-size:13px}
+  button.primary{background:var(--amber);color:#0a0e1a;border-color:var(--amber);font-weight:600}
+  button.primary:hover{background:#ffd394}
+  button.ghost{background:transparent}
+  .msg{font-size:11px;color:var(--rose);min-height:14px;margin-top:6px}
+  .msg.ok{color:#86efac}
+  #detect{width:44px;flex:none;padding:9px 0;text-align:center}
+  .note{font-size:11px;color:var(--mute);line-height:1.5;margin-top:10px;padding:8px 10px;background:#ffffff08;border-radius:8px;border:1px solid #ffffff0a}
+
+  /* VR Calibration Specific */
+  .calib-row { margin-bottom: 16px; }
+  .calib-row label { display: flex; justify-content: space-between; font-size: 12px; color: var(--ink); margin-bottom: 4px; }
+  .calib-row label span { color: var(--amber); }
+
+  #veil{
+    position:fixed;inset:0;z-index:9;display:grid;place-content:center;gap:8px;text-align:center;
+    background:radial-gradient(circle at 50% 44%,#0b1224,#04060c 72%);transition:opacity .9s ease .1s;
+  }
+  #veil h1{margin:0;font-size:13px;letter-spacing:.7em;color:var(--amber);font-weight:600}
+  #veil p{margin:0;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--mute)}
+  #veil.gone{opacity:0;pointer-events:none}
+
+  @media (max-width:480px){
+    #hud{gap:10px;font-size:9px}
+    #hud b{font-size:10px}
+    button{padding:7px 10px;font-size:12px}
+    #info{width:calc(100% - 20px);right:10px;bottom:150px;top:auto;max-height:40vh}
+    body.vr #info{top:50%; left:50%; transform:translate(-50%,-50%); max-height:60vh;}
+    .coords{grid-template-columns:1fr 1fr}
+    body.vr .panel { width: 90vw; max-width: none; }
+    body.vr button { padding: 14px 18px; font-size: 16px; } /* Bigger buttons on mobile VR */
+  }
+  @media (prefers-reduced-motion:reduce){
+    #veil,#setup,#settings,#vr-calib{transition:none}
+    button{transition:none}
+    #info.open{animation:none}
+    #btn-mic.recording{animation:none}
+  }
+</style>
+</head>
+<body>
+
+<canvas id="gl" aria-label="Sky background"></canvas>
+<canvas id="overlay" aria-hidden="true"></canvas>
+
+<div id="hud" aria-hidden="true">
+  <div><span>HDG</span><b id="v-hdg">000°</b></div>
+  <div><span>PITCH</span><b id="v-pit">+00°</b></div>
+  <div><span>SUN</span><b id="v-sun">+00°</b></div>
+  <div><span>OBS</span><b id="v-loc">SHAHDOL</b></div>
+  <div><span>FPS</span><b id="v-fps">–</b></div>
+</div>
+
+<div id="brand">SKY&nbsp;VR</div>
+<div id="tooltip" role="status" aria-live="polite"></div>
+
+<aside id="info" aria-live="polite">
+  <button class="close" id="info-close" aria-label="Close panel">×</button>
+  <h2 id="info-name">—</h2>
+  <div class="sub" id="info-type">—</div>
+  <div id="info-body"></div>
+
+  <div id="ai-block">
+    <div class="ai-header">
+      <span class="ai-badge">AI</span>
+      <span id="ai-status">Ready</span>
+    </div>
+    <div id="ai-content"></div>
+    <div class="ai-actions">
+      <button id="btn-mic" title="Ask by voice" aria-label="Ask by voice">🎤</button>
+      <input id="ai-input" type="text" placeholder="Ask about this object…" aria-label="Ask about this object">
+      <button id="btn-ask" title="Send" aria-label="Send">↵</button>
+    </div>
+  </div>
+</aside>
+
+<!-- ================= SETUP MODAL ================= -->
+<div id="setup">
+  <div class="box">
+    <h2>Observer Setup</h2>
+    <p class="sub">Location · Date · Time</p>
+
+    <label class="fld">
+      <span>Location name</span>
+      <div class="input-row">
+        <input id="inp-loc" type="text" placeholder="Search city, e.g. Shahdol" value="Shahdol, India">
+        <button id="detect" type="button" title="Detect my location">📍</button>
+      </div>
+    </label>
+
+    <div class="coords">
+      <label><span>Lat</span><input id="inp-lat" type="number" step="any" value="23.2936"></label>
+      <label><span>Lon</span><input id="inp-lon" type="number" step="any" value="81.3619"></label>
+      <label><span>Alt (m)</span><input id="inp-alt" type="number" step="any" value="468"></label>
+    </div>
+
+    <div class="coords two">
+      <label><span>Date</span><input id="inp-date" type="date"></label>
+      <label><span>Time</span><input id="inp-time" type="time" value="19:15"></label>
+    </div>
+
+    <div class="msg" id="setup-msg"></div>
+
+    <div class="actions">
+      <button id="btn-defaults" type="button" class="ghost">Shahdol default</button>
+      <button id="btn-start" type="button" class="primary">Enter Sky</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= SETTINGS MODAL (AI) ================= -->
+<div id="settings" class="gone">
+  <div class="box">
+    <h2>AI Settings</h2>
+    <p class="sub">Groq API Configuration</p>
+
+    <label class="fld">
+      <span>Groq API Key</span>
+      <input id="inp-groq" type="password" placeholder="gsk_..." autocomplete="off">
+    </label>
+
+    <div class="note">
+      Your key is stored locally in this browser only. It is sent directly to <code>api.groq.com</code>. Get a free key at console.groq.com.
+    </div>
+
+    <div class="msg" id="settings-msg"></div>
+
+    <div class="actions">
+      <button id="btn-clear-key" type="button" class="ghost">Clear key</button>
+      <button id="btn-save-key" type="button" class="primary">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= VR CALIBRATION MODAL ================= -->
+<div id="vr-calib" class="gone">
+  <div class="box">
+    <h2>VR Calibration</h2>
+    <p class="sub">Adjust for your VR Box</p>
+
+    <div class="calib-row">
+      <label>IPD (Lens Spacing) <span id="ipd-val">0</span></label>
+      <input id="ipd-slider" type="range" min="-50" max="50" step="1" value="0">
+    </div>
+
+    <div class="calib-row">
+      <label>Vertical Offset <span id="voff-val">0</span></label>
+      <input id="voff-slider" type="range" min="-100" max="100" step="1" value="0">
+    </div>
+    
+    <div class="calib-row">
+      <label>Screen Scale (Zoom) <span id="scale-val">1.0x</span></label>
+      <input id="scale-slider" type="range" min="0.5" max="1.5" step="0.05" value="1.0">
+    </div>
+
+    <div class="note">
+      Move the sliders until the two overlapping images align perfectly in the center of your VR lenses.
+    </div>
+
+    <div class="actions">
+      <button id="btn-calib-close" type="button" class="primary">Done</button>
+    </div>
+  </div>
+</div>
+
+<button id="vr-menu-btn" title="Show VR Menu">☰</button>
+
+<div id="bar">
+  <div class="panel">
+    <div class="row">
+      <label class="lab" for="time">TIME</label>
+      <input id="time" type="range" min="0" max="24" step="0.01" value="19.15" aria-label="Time of day">
+      <b class="clock" id="v-time">19:09</b>
+      <button id="b-now" title="Jump to now">Now</button>
+    </div>
+    <div class="row">
+      <button id="b-cycle" class="on" title="Animate the night">Cycle</button>
+      <button id="b-drift" class="on" title="Slow camera drift">Drift</button>
+      <button id="b-ground" class="on" title="Ground &amp; horizon">Ground</button>
+      <button id="b-grid" class="on" title="Grids">Grid</button>
+      <button id="b-names" class="on" title="Labels">Names</button>
+      <button id="b-gyro" title="Device motion">Gyro</button>
+      <button id="b-vr" title="Split-screen stereo">VR</button>
+      <button id="b-full" title="Fullscreen">Full</button>
+      <button id="b-loc" title="Change location &amp; time">📍</button>
+      <button id="b-ai" title="AI settings">🤖</button>
+      <button id="b-calib" title="VR Calibration">⚙️</button>
+      <button id="b-reset" title="Reset view">Reset</button>
+    </div>
+    <div class="row" id="vr-close-row">
+      <button id="b-close-vr-menu">✕ Close VR Menu</button>
+    </div>
+  </div>
+</div>
+
+<div id="veil"><h1>SKY VR</h1><p>tap an object · hover to inspect · ask AI</p></div>
+
+<script type="importmap">
+{ "imports": { "astronomy-engine": "https://cdn.jsdelivr.net/npm/astronomy-engine@2.1.19/+esm" } }
+</script>
+
+<script type="module">
+import * as Astronomy from 'astronomy-engine';
+
+let OBSERVER = new Astronomy.Observer(23.2936, 81.3619, 468);
+let OBSERVER_LABEL = 'Shahdol';
+
+const glCanvas = document.getElementById('gl');
+const ovCanvas = document.getElementById('overlay');
+const gl = glCanvas.getContext('webgl', { alpha:false, antialias:false, depth:false, stencil:false, premultipliedAlpha:false, powerPreference:'high-performance' });
+const ov = ovCanvas.getContext('2d');
+
+const veil = document.getElementById('veil');
+const $ = id => document.getElementById(id);
+const elHdg=$('v-hdg'), elPit=$('v-pit'), elSun=$('v-sun'), elFps=$('v-fps'), elTime=$('v-time'), slider=$('time'), elLoc=$('v-loc');
+const infoPanel=$('info'), infoName=$('info-name'), infoType=$('info-type'), infoBody=$('info-body');
+const tooltip=$('tooltip');
+const setupModal=$('setup'), setupMsg=$('setup-msg');
+const settingsModal=$('settings'), settingsMsg=$('settings-msg');
+const vrCalibModal=$('vr-calib');
+const aiStatus=$('ai-status'), aiContent=$('ai-content');
+const btnMic=$('btn-mic'), btnAsk=$('btn-ask'), aiInput=$('ai-input');
+
+const DEG = Math.PI/180, RAD = 180/Math.PI;
+const clamp = (v,a,b) => v<a?a:v>b?b:v;
+
+const vrState = { ipdOffset: 0, vOffset: 0, scale: 1.0 };
+
+const state = {
+  yaw:-1.52, pitch:0.08, fov:72, hour:19.15, cloud:0.55,
+  drift:true, cycle:true, ground:true, grid:true, names:true,
+  stereo:false, gyro:false, observerDate:new Date(),
+  selected:null, pointerX:0, pointerY:0, pointerActive:false, hovered:null,
+  hoverDwellStart:0, hoverDwellTarget:null
+};
+const DEFAULT = { yaw:-1.52, pitch:0.08, fov:72, hour:19.15 };
+
+if(!gl){ veil.innerHTML='<h1>SKY VR</h1><p>WebGL unavailable</p>'; throw new Error('no webgl'); }
+
+const VERT=`attribute vec2 aPos;varying vec2 vUv;void main(){vUv=aPos*0.5+0.5;gl_Position=vec4(aPos,0.,1.);}`;
+const FRAG=`
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+varying vec2 vUv;
+uniform vec2 uRes; uniform vec3 uFwd,uRight,uUp,uSun,uMoon;
+uniform float uTanHalf,uTime,uCloud,uGround;
+float hash13(vec3 p){p=fract(p*0.1031);p+=dot(p,p.yzx+33.33);return fract((p.x+p.y)*p.z);}
+float hash12(vec2 p){vec3 p3=fract(vec3(p.xyx)*0.1031);p3+=dot(p3,p3.yzx+33.33);return fract((p3.x+p3.y)*p3.z);}
+float vnoise(vec2 p){vec2 i=floor(p),f=fract(p);vec2 u=f*f*(3.-2.*f);float a=hash12(i),b=hash12(i+vec2(1,0)),c=hash12(i+vec2(0,1)),d=hash12(i+vec2(1,1));return mix(mix(a,b,u.x),mix(c,d,u.x),u.y);}
+float fbm(vec2 p){float v=0.,a=.5;mat2 m=mat2(1.6,1.2,-1.2,1.6);for(int i=0;i<5;i++){v+=a*vnoise(p);p=m*p;a*=.5;}return v;}
+void main(){
+  float aspect=uRes.x/uRes.y;
+  vec2 ndc=vUv*2.-1.;
+  vec3 dir=normalize(uFwd+uRight*(ndc.x*uTanHalf*aspect)+uUp*(ndc.y*uTanHalf));
+  float sunEl=uSun.y;
+  float day=smoothstep(-0.10,0.25,sunEl);
+  float dusk=smoothstep(-0.42,-0.05,sunEl)*(1.-smoothstep(-0.02,0.30,sunEl));
+  float night=smoothstep(0.08,-0.14,sunEl);
+  vec3 zenDay=vec3(0.13,0.33,0.72),zenNight=vec3(0.008,0.014,0.040);
+  vec3 horDay=vec3(0.68,0.81,0.95),horNight=vec3(0.020,0.030,0.075);
+  vec3 warm=vec3(1.00,0.45,0.14);
+  vec3 zen=mix(zenNight,zenDay,day),hor=mix(horNight,horDay,day);
+  hor=mix(hor,warm,dusk*0.80);zen=mix(zen,warm*0.55,dusk*0.28);
+  float t=clamp(dir.y,0.,1.);
+  vec3 col=mix(hor,zen,pow(t,0.55));
+  float groundY=-0.015;
+  if(uGround>0.5 && dir.y<groundY){
+    float below=smoothstep(groundY,groundY-0.08,dir.y);
+    vec3 soilNear=vec3(0.085,0.070,0.055),soilFar=vec3(0.018,0.020,0.028);
+    vec3 gcol=mix(soilNear,soilFar,below);
+    vec2 gp=dir.xz/(abs(dir.y)+0.05)*1.8;
+    float tex=fbm(gp*2.)*0.25+fbm(gp*7.)*0.10;
+    gcol+=(tex-0.12)*0.15*(1.-below*0.6);
+    float haze=exp(-abs(dir.y-groundY)*28.);
+    vec3 hazeCol=mix(vec3(0.020,0.028,0.045),horDay,day);
+    gcol=mix(gcol,hazeCol,haze*0.72);
+    col=gcol;
+  } else if(uGround>0.5){
+    float haze=exp(-abs(dir.y)*40.);
+    col=mix(col,mix(vec3(0.015,0.020,0.035),hor,day),haze*0.35);
+  }
+  vec3 flatDir=normalize(vec3(dir.x,0.,dir.z)+vec3(1e-5));
+  vec3 flatSun=normalize(vec3(uSun.x,0.,uSun.z)+vec3(1e-5));
+  float az=max(dot(flatDir,flatSun),0.);
+  col+=warm*pow(az,5.)*(dusk*0.55+day*0.05)*smoothstep(-0.05,0.18,dir.y);
+  float sd=max(dot(dir,uSun),0.);
+  col+=vec3(1.,0.70,0.34)*pow(sd,8.)*0.18*max(0., sunEl*8.+0.4);
+  col+=vec3(1.,0.92,0.78)*smoothstep(0.99940,0.99985,sd)*5.*smoothstep(-0.08,0.02,sunEl);
+  if(night>0.01 && dir.y>-0.05){
+    float st=0.;
+    vec3 p1=dir*60.;vec3 i1=floor(p1);vec3 f1=fract(p1)-0.5;
+    if(hash13(i1)>0.982) st+=smoothstep(0.30,0.,length(f1))*2.4;
+    vec3 p2=dir*140.;vec3 i2=floor(p2);vec3 f2=fract(p2)-0.5;
+    if(hash13(i2)>0.960) st+=smoothstep(0.24,0.,length(f2));
+    st*=night*smoothstep(-0.02,0.14,dir.y);
+    col+=vec3(0.84,0.90,1.)*st*1.5;
+    vec3 gn=normalize(vec3(0.42,0.22,-0.88));
+    float band=exp(-pow(dot(dir,gn)*2.2,2.));
+    if(band>0.01){
+      float mn=fbm(vec2(atan(dir.z,dir.x)*2.4,dir.y*5.2));
+      float dust=fbm(vec2(atan(dir.z,dir.x)*5.5+11.,dir.y*9.));
+      float structure=smoothstep(0.35,0.95,mn)*(0.55+0.45*smoothstep(0.3,0.8,dust));
+      float bulge=exp(-pow(length(vec2(atan(dir.z,dir.x)+0.3,dir.y*1.6))*1.8,2.));
+      col+=vec3(0.36,0.40,0.58)*band*structure*night*0.65;
+      col+=vec3(0.55,0.48,0.40)*band*bulge*night*0.35;
+      col-=vec3(0.04,0.05,0.08)*band*smoothstep(0.6,0.9,dust)*night*0.5;
+    }
+  }
+  float md=dot(dir,uMoon);
+  float moonUp=smoothstep(-0.02,0.10,uMoon.y);
+  col+=vec3(0.90,0.93,1.)*smoothstep(0.99930,0.99975,md)*2.6*moonUp;
+  col+=vec3(0.45,0.55,0.85)*pow(max(md,0.),80.)*0.30*moonUp;
+  if(uCloud>0.001 && dir.y>0.004){
+    vec2 cuv=dir.xz/(dir.y+0.09)*0.62+vec2(uTime*0.0045,uTime*0.0024);
+    float n1=fbm(cuv*1.35),n2=fbm(cuv*3.30+vec2(7.3,2.1));
+    float d=n1*0.72+n2*0.34;
+    float cov=smoothstep(0.60-uCloud*0.20,0.94-uCloud*0.18,d)*smoothstep(0.,0.18,dir.y);
+    if(cov>0.001){
+      vec3 cn=normalize(vec3(dir.x,0.42,dir.z)),sn=normalize(vec3(uSun.x,0.75,uSun.z));
+      float lit=dot(cn,sn)*0.5+0.5;
+      vec3 cl=mix(vec3(0.22,0.26,0.38),vec3(1.,0.96,0.90),lit);
+      cl=mix(cl*0.30,cl,day*0.85+dusk*0.45);
+      cl=mix(cl,vec3(1.,0.52,0.24),dusk*0.55*lit);
+      cl+=vec3(1.,0.86,0.62)*pow(sd,24.)*0.9*smoothstep(-0.05,0.02,sunEl);
+      col=mix(col,cl,cov*0.92);
+    }
+  }
+  vec2 q=vUv-0.5;col*=1.-dot(q,q)*0.30;
+  col+=(hash12(gl_FragCoord.xy+fract(uTime)*61.)-0.5)*0.006;
+  gl_FragColor=vec4(clamp(col,0.,1.),1.);
+}`;
+function mkShader(t,s){const sh=gl.createShader(t);gl.shaderSource(sh,s);gl.compileShader(sh);if(!gl.getShaderParameter(sh,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(sh));return sh;}
+const prog=gl.createProgram();
+gl.attachShader(prog,mkShader(gl.VERTEX_SHADER,VERT));
+gl.attachShader(prog,mkShader(gl.FRAGMENT_SHADER,FRAG));
+gl.linkProgram(prog);
+if(!gl.getProgramParameter(prog,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(prog));
+gl.useProgram(prog);
+const U={}; ['uRes','uFwd','uRight','uUp','uSun','uMoon','uTanHalf','uTime','uCloud','uGround'].forEach(n=>U[n]=gl.getUniformLocation(prog,n));
+const buf=gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,3,-1,-1,3]),gl.STATIC_DRAW);
+const aPos=gl.getAttribLocation(prog,'aPos');
+gl.enableVertexAttribArray(aPos);
+gl.vertexAttribPointer(aPos,2,gl.FLOAT,false,0,0);
+
+// --- Catalogs ---
+const STARS = [
+  ['Sirius',6.752,-16.716,-1.46,'A1V'],['Canopus',6.399,-52.696,-0.74,'F0II'],['Arcturus',14.261,19.182,-0.05,'K1III'],['Vega',18.615,38.784,0.03,'A0V'],
+  ['Capella',5.278,45.998,0.08,'G8III'],['Rigel',5.242,-8.202,0.13,'B8Ia'],['Procyon',7.655,5.225,0.34,'F5IV'],['Betelgeuse',5.919,7.407,0.50,'M1Ia'],
+  ['Achernar',1.629,-57.237,0.46,'B3V'],['Hadar',14.064,-60.373,0.61,'B1III'],['Altair',19.846,8.868,0.77,'A7V'],['Aldebaran',4.599,16.509,0.85,'K5III'],
+  ['Antares',16.490,-26.432,1.09,'M1Ib'],['Spica',13.420,-11.161,1.04,'B1III'],['Pollux',7.755,28.026,1.14,'K0III'],['Fomalhaut',22.961,-29.622,1.16,'A3V'],
+  ['Deneb',20.690,45.280,1.25,'A2Ia'],['Regulus',10.140,11.967,1.35,'B8IV'],['Castor',7.577,31.888,1.58,'A1V'],['Bellatrix',5.418,6.350,1.64,'B2III'],
+  ['Elnath',5.438,28.608,1.65,'B7III'],['Mintaka',5.533,-0.299,2.25,'O9.5II'],['Alnilam',5.604,-1.202,1.69,'B0Ia'],['Alnitak',5.679,-1.943,1.74,'O9.7Ib'],
+  ['Saiph',5.796,-9.670,2.07,'B0Ia'],['Dubhe',11.062,61.751,1.79,'K0III'],['Merak',11.031,56.383,2.37,'A1V'],['Phecda',11.897,53.695,2.44,'A0V'],
+  ['Megrez',12.257,57.033,3.31,'A3V'],['Alioth',12.900,55.960,1.77,'A1III'],['Mizar',13.399,54.925,2.23,'A2V'],['Alkaid',13.792,49.313,1.86,'B3V'],
+  ['Polaris',2.530,89.264,1.98,'F7Ib'],['Kochab',14.845,74.156,2.08,'K4III'],['Schedar',0.675,56.537,2.24,'K0IIIa'],['Caph',0.153,59.150,2.28,'F2III'],
+  ['Algol',3.136,40.956,2.09,'B8V'],['Mirfak',3.405,49.861,1.79,'F5Ib'],['Alcyone',3.791,24.105,2.87,'B7III'],['Hamal',2.119,23.463,2.00,'K2III'],
+  ['Denebola',11.818,14.572,2.14,'A3V'],['Alphard',9.460,-8.659,1.98,'K3II'],['Menkent',14.111,-36.370,2.06,'K0III'],['Mirach',1.162,35.621,2.07,'M0III'],
+  ['Almach',2.065,42.330,2.10,'K3II'],['Rasalhague',17.582,12.560,2.08,'A5III'],['Rasalgethi',17.244,14.390,3.48,'M5Ib'],['Unukalhai',15.738,6.426,2.63,'K2III'],
+  ['Nunki',18.921,-26.297,2.05,'B2.5V'],['Kaus Australis',18.403,-34.385,1.85,'B9.5III'],['Shaula',17.560,-37.104,1.62,'B2IV'],['Sargas',17.622,-42.998,1.86,'F1II'],
+  ['Dschubba',16.005,-22.622,2.29,'B0.3IV'],['Acrab',16.090,-19.806,2.56,'B1V'],['Zubeneschamali',15.283,-9.383,2.61,'B8V'],['Zubenelgenubi',14.848,-16.042,2.75,'A3IV'],
+  ['Sadr',20.370,40.257,2.23,'F8Iab'],['Gienah',20.770,33.970,2.48,'K0III'],['Albireo',19.512,27.960,3.08,'K3II'],['Tarazed',19.770,10.613,2.72,'K3II']
+];
+const DSO = [
+  ['M42 Orion Nebula',5.588,-5.391,4.0,'nebula',85],['M8 Lagoon',18.063,-24.386,6.0,'nebula',90],['M16 Eagle',18.313,-13.792,6.0,'nebula',35],
+  ['M17 Omega',18.346,-16.171,6.0,'nebula',45],['M20 Trifid',18.045,-23.033,6.3,'nebula',28],['M27 Dumbbell',19.994,22.721,7.4,'nebula',8],
+  ['M57 Ring',18.893,33.029,8.8,'nebula',1.4],['M1 Crab',5.575,22.015,8.4,'nebula',6],['NGC 7000 N.America',20.979,44.330,4.0,'nebula',120],
+  ['M31 Andromeda',0.712,41.269,3.4,'galaxy',190],['M33 Triangulum',1.564,30.660,5.7,'galaxy',70],['M51 Whirlpool',13.498,47.195,8.4,'galaxy',11],
+  ['M81 Bode',9.926,69.065,6.9,'galaxy',27],['M82 Cigar',9.931,69.680,8.4,'galaxy',11],['M87 Virgo A',12.514,12.391,8.6,'galaxy',7],
+  ['M104 Sombrero',12.667,-11.623,8.0,'galaxy',9],['M45 Pleiades',3.790,24.117,1.6,'cluster',110],['M44 Beehive',8.670,19.983,3.7,'cluster',95],
+  ['M13 Hercules',16.695,36.467,5.8,'cluster',20],['M22 Sagittarius',18.607,-23.904,5.1,'cluster',32],['M4 Scorpius',16.393,-26.526,5.6,'cluster',36]
+];
+const BLACK_HOLES = [
+  ['Sagittarius A*',17.761,-29.008],['M87*',12.514,12.391],['Cygnus X-1',19.973,35.202],['V404 Cygni',20.399,33.867],
+  ['A0620-00',6.373,-0.343],['GRO J1655-40',16.912,-39.846],['XTE J1118+480',11.303,48.037],['GX 339-4',17.005,-48.794]
+];
+const ASTEROIDS = [
+  ['Ceres',2.7675,0.0758,10.593,80.393,73.597,77.372,939],['Vesta',2.3617,0.0887,7.140,103.810,151.198,20.863,525],
+  ['Pallas',2.7721,0.2306,34.842,173.024,310.202,83.162,512],['Juno',2.6690,0.2562,12.991,169.858,248.410,34.893,246]
+];
+const PLANET_FACTS = {
+  Mercury:{radius:'2,440 km',mass:'3.30 × 10²³ kg',day:'58.6 Earth days',year:'88 Earth days',moons:0,temp:'167°C avg',desc:'Smallest planet, extreme temperature swings, no atmosphere.'},
+  Venus:{radius:'6,052 km',mass:'4.87 × 10²⁴ kg',day:'243 days (retrograde)',year:'225 days',moons:0,temp:'464°C avg',desc:'Hottest planet, thick CO₂ atmosphere, crushing pressure.'},
+  Earth:{radius:'6,371 km',mass:'5.97 × 10²⁴ kg',day:'24 h',year:'365.25 days',moons:1,temp:'15°C avg',desc:'Our home world; liquid oceans, protective magnetic field.'},
+  Mars:{radius:'3,390 km',mass:'6.42 × 10²³ kg',day:'24.6 h',year:'687 days',moons:2,temp:'−65°C avg',desc:'The Red Planet; thin CO₂ atmosphere, polar caps, ancient riverbeds.'},
+  Jupiter:{radius:'69,911 km',mass:'1.90 × 10²⁷ kg',day:'9.9 h',year:'11.9 yr',moons:95,temp:'−110°C clouds',desc:'Largest planet; Great Red Spot, powerful magnetosphere.'},
+  Saturn:{radius:'58,232 km',mass:'5.68 × 10²⁶ kg',day:'10.7 h',year:'29.5 yr',moons:146,temp:'−140°C clouds',desc:'Ringed giant; least dense planet, rings mainly water ice.'},
+  Uranus:{radius:'25,362 km',mass:'8.68 × 10²⁵ kg',day:'17.2 h',year:'84 yr',moons:27,temp:'−195°C avg',desc:'Ice giant tipped on its side; methane gives blue-green hue.'},
+  Neptune:{radius:'24,622 km',mass:'1.02 × 10²⁶ kg',day:'16.1 h',year:'165 yr',moons:14,temp:'−200°C avg',desc:'Windiest planet; supersonic storms, deep blue methane sky.'},
+  Moon:{radius:'1,737 km',mass:'7.35 × 10²² kg',day:'27.3 days',year:'27.3 days (orbit)',moons:0,temp:'−20°C avg',desc:'Earth’s natural satellite; tidally locked, causes tides.'},
+  Sun:{radius:'696,340 km',mass:'1.99 × 10³⁰ kg',day:'25.4 d (equator)',year:'—',moons:0,temp:'5,500°C surface',desc:'G-type main-sequence star; 99.86% of Solar System mass.'}
+};
+
+function lstRad(date){
+  const jd = Astronomy.MakeTime(date).tt;
+  const T = (jd-2451545)/36525;
+  let gmst = 280.46061837 + 360.98564736629*(jd-2451545) + 0.000387933*T*T - (T*T*T)/38710000;
+  gmst = ((gmst%360)+360)%360;
+  return ((gmst + OBSERVER.longitude) % 360) * DEG;
+}
+function raDecToAltAz(date, raHours, decDeg){
+  const lst = lstRad(date);
+  const ha = lst - raHours*15*DEG;
+  const dec = decDeg*DEG;
+  const lat = OBSERVER.latitude*DEG;
+  const sinAlt = Math.sin(dec)*Math.sin(lat) + Math.cos(dec)*Math.cos(lat)*Math.cos(ha);
+  const alt = Math.asin(clamp(sinAlt,-1,1));
+  const cosAz = (Math.sin(dec) - Math.sin(alt)*Math.sin(lat)) / (Math.cos(alt)*Math.cos(lat) + 1e-9);
+  let az = Math.acos(clamp(cosAz,-1,1));
+  if (Math.sin(ha) > 0) az = 2*Math.PI - az;
+  return { alt, az };
+}
+function altAzToVec(alt, az){
+  return [Math.cos(alt)*Math.sin(az), Math.sin(alt), -Math.cos(alt)*Math.cos(az)];
+}
+function solveKepler(M,e){let E=M;for(let i=0;i<8;i++)E=E-(E-e*Math.sin(E)-M)/(1-e*Math.cos(E));return E;}
+function asteroidGeocentricRaDec(el, date){
+  const jd = Astronomy.MakeTime(date).tt;
+  const [name,a,e,iDeg,OmDeg,wDeg,M0Deg] = el;
+  const n = 0.9856076686 / Math.pow(a,1.5);
+  const M = (((M0Deg + n*(jd-2451545))%360)+360)%360 * DEG;
+  const E = solveKepler(M,e);
+  const xv = a*(Math.cos(E)-e), yv = a*Math.sqrt(1-e*e)*Math.sin(E);
+  const v = Math.atan2(yv,xv), r = Math.hypot(xv,yv);
+  const w=wDeg*DEG, Om=OmDeg*DEG, inc=iDeg*DEG;
+  const cV=Math.cos(v+w), sV=Math.sin(v+w), cO=Math.cos(Om), sO=Math.sin(Om), cI=Math.cos(inc), sI=Math.sin(inc);
+  const hx = r*(cO*cV - sO*sV*cI);
+  const hy = r*(sO*cV + cO*sV*cI);
+  const hz = r*(sV*sI);
+  const earth = Astronomy.HelioVector(Astronomy.Body.Earth, date);
+  const gx = hx-earth.x, gy = hy-earth.y, gz = hz-earth.z;
+  const obl = 23.439*DEG;
+  const xe = gx, ye = gy*Math.cos(obl)-gz*Math.sin(obl), ze = gy*Math.sin(obl)+gz*Math.cos(obl);
+  const ra = Math.atan2(ye,xe);
+  const dec = Math.atan2(ze, Math.hypot(xe,ye));
+  return { ra: ((ra/DEG/15)%24+24)%24, dec: dec*RAD, dist: Math.hypot(gx,gy,gz) };
+}
+
+const F=[0,0,0], R=[0,0,0], UP=[0,0,0];
+function basisFromYawPitch(){
+  const cp=Math.cos(state.pitch), sp=Math.sin(state.pitch);
+  const cy=Math.cos(state.yaw),   sy=Math.sin(state.yaw);
+  F[0]=sy*cp; F[1]=sp; F[2]=-cy*cp;
+  R[0]=cy;    R[1]=0;  R[2]=sy;
+  UP[0]=R[1]*F[2]-R[2]*F[1];
+  UP[1]=R[2]*F[0]-R[0]*F[2];
+  UP[2]=R[0]*F[1]-R[1]*F[0];
+}
+let gyroQ = null;
+function qmul(a,b){
+  return { x:a.w*b.x+a.x*b.w+a.y*b.z-a.z*b.y, y:a.w*b.y-a.x*b.z+a.y*b.w+a.z*b.x, z:a.w*b.z+a.x*b.y-a.y*b.x+a.z*b.w, w:a.w*b.w-a.x*b.x-a.y*b.y-a.z*b.z };
+}
+function qrot(q,v){
+  const ix=q.w*v.x+q.y*v.z-q.z*v.y, iy=q.w*v.y+q.z*v.x-q.x*v.z, iz=q.w*v.z+q.x*v.y-q.y*v.x, iw=-q.x*v.x-q.y*v.y-q.z*v.z;
+  return { x:ix*q.w+iw*-q.x+iy*-q.z-iz*-q.y, y:iy*q.w+iw*-q.y+iz*-q.x-ix*-q.z, z:iz*q.w+iw*-q.z+ix*-q.y-iy*-q.x };
+}
+function eulerYXZ(x,y,z){
+  const c1=Math.cos(x/2),c2=Math.cos(y/2),c3=Math.cos(z/2),s1=Math.sin(x/2),s2=Math.sin(y/2),s3=Math.sin(z/2);
+  return { x:s1*c2*c3+c1*s2*s3, y:c1*s2*c3-s1*c2*s3, z:c1*c2*s3-s1*s2*c3, w:c1*c2*c3+s1*s2*s3 };
+}
+function applyGyroBasis(){
+  if (!gyroQ) return false;
+  const f=qrot(gyroQ,{x:0,y:0,z:-1}), r=qrot(gyroQ,{x:1,y:0,z:0}), u=qrot(gyroQ,{x:0,y:1,z:0});
+  F[0]=f.x;F[1]=f.y;F[2]=f.z; R[0]=r.x;R[1]=r.y;R[2]=r.z; UP[0]=u.x;UP[1]=u.y;UP[2]=u.z;
+  return true;
+}
+function projectVec(v, W, H){
+  const z = v[0]*F[0] + v[1]*F[1] + v[2]*F[2];
+  if (z <= 0.01) return null;
+  const x = v[0]*R[0] + v[1]*R[1] + v[2]*R[2];
+  const y = v[0]*UP[0] + v[1]*UP[1] + v[2]*UP[2];
+  const f = H / (2*Math.tan(state.fov*0.5*DEG));
+  return { sx: W/2 + (x/z)*f, sy: H/2 - (y/z)*f, depth: z };
+}
+
+const PICK = [];
+const PLANET_BODIES = [
+  ['Sun',Astronomy.Body.Sun,'#ffd27a'],['Moon',Astronomy.Body.Moon,'#dbeafe'],['Mercury',Astronomy.Body.Mercury,'#d1d5db'],
+  ['Venus',Astronomy.Body.Venus,'#fde68a'],['Mars',Astronomy.Body.Mars,'#fca5a5'],['Jupiter',Astronomy.Body.Jupiter,'#fcd34d'],
+  ['Saturn',Astronomy.Body.Saturn,'#fde047'],['Uranus',Astronomy.Body.Uranus,'#a5f3fc'],['Neptune',Astronomy.Body.Neptune,'#93c5fd']
+];
+function specColor(spec){
+  if(!spec) return '#cfe4ff';
+  const c=spec[0].toUpperCase();
+  return c==='O'?'#9bb0ff':c==='B'?'#aabfff':c==='A'?'#cad7ff':c==='F'?'#f8f7ff':c==='G'?'#fff4ea':c==='K'?'#ffd2a1':c==='M'?'#ffb56b':'#cfe4ff';
+}
+function rebuildPickList(date){
+  PICK.length = 0;
+  const W = window.innerWidth, H = window.innerHeight;
+  const push = (name, type, raH, decD, color, extra) => {
+    const { alt, az } = raDecToAltAz(date, raH, decD);
+    if (alt < -0.02) return;
+    const v = altAzToVec(alt, az);
+    const p = projectVec(v, W, H);
+    if (!p) return;
+    PICK.push({ name, type, sx: p.sx, sy: p.sy, color, extra, v });
+  };
+  for (const [name, body, color] of PLANET_BODIES){
+    try {
+      const eq = Astronomy.Equator(body, date, OBSERVER, true, true);
+      const extra = {};
+      if (eq.dist && name !== 'Sun' && name !== 'Moon') extra.distance = eq.dist.toFixed(3) + ' AU';
+      if (name === 'Moon') { const ill = Astronomy.Illumination(Astronomy.Body.Moon, date); extra.illum = (ill.phase*100).toFixed(0) + '%'; }
+      if (name !== 'Sun'){ try { const ill = Astronomy.Illumination(body, date); extra.mag = ill.mag.toFixed(1); } catch(_){} }
+      push(name, 'Planet', eq.ra, eq.dec, color, extra);
+    } catch (_) {}
+  }
+  for (const [name, raH, decD, mag, type] of STARS){
+    if (mag > 3.0) continue;
+    push(name, 'Star', raH, decD, specColor(type), { mag: mag.toFixed(2), spectral: type });
+  }
+  for (const [name, raH, decD, mag, type, size] of DSO){
+    if (mag > 7.5) continue;
+    push(name, type.charAt(0).toUpperCase()+type.slice(1), raH, decD, type==='nebula'?'#67e8f9':type==='galaxy'?'#fb7185':'#ffc26b', { mag: mag.toFixed(1), size: size + "'" });
+  }
+  for (const [name, raH, decD] of BLACK_HOLES){
+    push(name, 'Black hole', raH, decD, '#a78bfa', {});
+  }
+  for (const el of ASTEROIDS){
+    try {
+      const rd = asteroidGeocentricRaDec(el, date);
+      push(el[0], 'Asteroid', rd.ra, rd.dec, '#fbbf24', { diameter: el[7] + ' km', distance: rd.dist.toFixed(2) + ' AU' });
+    } catch(_){}
+  }
+}
+
+// --- 2D Canvas Overlay ---
+function drawScene(date, W, H) {
+  if (state.ground) drawCardinals(W,H);
+  if (state.grid) drawGrid(date,W,H);
+  drawStars(date,W,H);
+  drawPlanets(date,W,H);
+  drawDSO(date,W,H);
+  drawBlackHoles(date,W,H);
+  drawAsteroids(date,W,H);
+}
+
+function drawOverlay(date){
+  const dpr = Math.min(window.devicePixelRatio||1, 2);
+  const cw = window.innerWidth, ch = window.innerHeight;
+  ovCanvas.width = Math.round(cw * dpr);
+  ovCanvas.height = Math.round(ch * dpr);
+  ovCanvas.style.width = cw + 'px';
+  ovCanvas.style.height = ch + 'px';
+  ov.setTransform(dpr,0,0,dpr,0,0);
+  ov.clearRect(0,0,cw,ch);
+
+  if (state.gyro && gyroQ) applyGyroBasis();
+  else basisFromYawPitch();
+
+  if (state.stereo) {
+    const halfW = cw / 2;
+    const scale = vrState.scale;
+    const shiftX = vrState.ipdOffset * (cw/800);
+    const shiftY = vrState.vOffset * (ch/800);
+
+    // Left Eye
+    ov.save();
+    ov.translate(shiftX + (halfW - halfW*scale)/2, shiftY + (ch - ch*scale)/2);
+    ov.scale(scale, scale);
+    ov.beginPath(); ov.rect(0, 0, halfW, ch); ov.clip();
+    
+    const lf = toeInF(F, R, 0.011); // Converge left eye to the right
+    const oldF = [...F]; F[0]=lf[0]; F[1]=lf[1]; F[2]=lf[2];
+    
+    drawScene(date, halfW, ch);
+    if (state.hovered) drawHoverHighlight(state.hovered.v, halfW, ch);
+    drawReticle(halfW/2, ch/2, !!state.hovered);
+    
+    F[0]=oldF[0]; F[1]=oldF[1]; F[2]=oldF[2];
+    ov.restore();
+
+    // Right Eye
+    ov.save();
+    ov.translate(halfW + shiftX + (halfW - halfW*scale)/2, shiftY + (ch - ch*scale)/2);
+    ov.scale(scale, scale);
+    ov.beginPath(); ov.rect(0, 0, halfW, ch); ov.clip();
+    
+    const rf = toeInF(F, R, -0.011); // Converge right eye to the left
+    F[0]=rf[0]; F[1]=rf[1]; F[2]=rf[2];
+    
+    drawScene(date, halfW, ch);
+    if (state.hovered) drawHoverHighlight(state.hovered.v, halfW, ch);
+    drawReticle(halfW/2, ch/2, !!state.hovered);
+    
+    F[0]=oldF[0]; F[1]=oldF[1]; F[2]=oldF[2];
+    ov.restore();
+  } else {
+    drawScene(date, cw, ch);
+    if (state.hovered) drawHoverHighlight(state.hovered.v, cw, ch);
+    drawReticle(state.pointerX, state.pointerY, !!state.hovered);
+  }
+}
+
+function drawCardinals(W,H){
+  const dirs = [['N',0],['NE',45],['E',90],['SE',135],['S',180],['SW',225],['W',270],['NW',315]];
+  ov.textAlign='center'; ov.textBaseline='middle';
+  for (const [label, azDeg] of dirs){
+    const v = altAzToVec(0, azDeg*DEG);
+    const p = projectVec(v, W, H);
+    if (!p || p.sy < 40 || p.sy > H-40) continue;
+    ov.font = `600 14px "Avenir Next", system-ui, sans-serif`;
+    ov.fillStyle = 'rgba(255,194,107,0.92)';
+    ov.fillText(label, p.sx, p.sy - 14);
+    ov.beginPath(); ov.moveTo(p.sx, p.sy-4); ov.lineTo(p.sx, p.sy+4);
+    ov.strokeStyle='rgba(255,194,107,0.55)'; ov.lineWidth=1.5; ov.stroke();
+  }
+  const pts = [];
+  for (let az=0; az<360; az+=4){
+    const v = altAzToVec(0, az*DEG);
+    const p = projectVec(v, W, H);
+    if (p) pts.push(p);
+  }
+  if (pts.length > 1){
+    ov.beginPath(); ov.moveTo(pts[0].sx, pts[0].sy);
+    for (let i=1; i<pts.length; i++) ov.lineTo(pts[i].sx, pts[i].sy);
+    ov.strokeStyle='rgba(255,194,107,0.18)'; ov.lineWidth=1; ov.stroke();
+  }
+}
+function drawStars(date,W,H){
+  for (const [name, raH, decD, mag, spec] of STARS){
+    const { alt, az } = raDecToAltAz(date, raH, decD);
+    if (alt < -0.05) continue;
+    const v = altAzToVec(alt, az);
+    const p = projectVec(v, W, H);
+    if (!p) continue;
+    const r = Math.max(0.6, (6.5-mag)*1.4);
+    const color = specColor(spec);
+    ov.beginPath(); ov.arc(p.sx,p.sy,r,0,2*Math.PI);
+    ov.fillStyle=color; ov.shadowColor=color; ov.shadowBlur=r*1.5; ov.fill(); ov.shadowBlur=0;
+    if (state.names && mag < 2.2){
+      ov.font='11px "Avenir Next", system-ui, sans-serif';
+      ov.fillStyle='rgba(232,236,246,0.82)'; ov.textAlign='left';
+      ov.fillText(name, p.sx+r+3, p.sy-r-2);
+    }
+  }
+}
+function drawPlanets(date,W,H){
+  for (const [name, body, color] of PLANET_BODIES){
+    let eq;
+    try { eq = Astronomy.Equator(body, date, OBSERVER, true, true); } catch(_){ continue; }
+    const { alt, az } = raDecToAltAz(date, eq.ra, eq.dec);
+    if (alt < -0.02) continue;
+    const v = altAzToVec(alt, az);
+    const p = projectVec(v, W, H);
+    if (!p) continue;
+    const r = name==='Sun'?8:name==='Moon'?7:4;
+    ov.beginPath(); ov.arc(p.sx,p.sy,r,0,2*Math.PI);
+    ov.fillStyle=color; ov.shadowColor=color; ov.shadowBlur=r*2; ov.fill(); ov.shadowBlur=0;
+    if (state.names){
+      ov.font='bold 11px "Avenir Next", system-ui, sans-serif';
+      ov.fillStyle=color; ov.textAlign='left';
+      ov.fillText(name, p.sx+r+4, p.sy-r-2);
+    }
+  }
+}
+function drawDSO(date,W,H){
+  for (const [name, raH, decD, mag, type, size] of DSO){
+    const { alt, az } = raDecToAltAz(date, raH, decD);
+    if (alt < -0.02) continue;
+    const v = altAzToVec(alt, az);
+    const p = projectVec(v, W, H);
+    if (!p) continue;
+    const r = type==='galaxy'?Math.max(2,Math.log10(size+1)*2):type==='nebula'?Math.max(2,Math.log10(size+1)*1.8):Math.max(1.5,Math.log10(size+1)*1.5);
+    const col = type==='nebula'?'rgba(103,232,249,0.55)':type==='galaxy'?'rgba(251,113,133,0.50)':'rgba(255,194,107,0.55)';
+    ov.beginPath(); ov.arc(p.sx,p.sy,r,0,2*Math.PI);
+    ov.fillStyle=col; ov.fill();
+    ov.strokeStyle=col.replace('0.5','0.9'); ov.lineWidth=0.6; ov.stroke();
+    if (state.names && mag < 8.5){
+      ov.font='10px "Avenir Next", system-ui, sans-serif';
+      ov.fillStyle='rgba(232,236,246,0.68)'; ov.textAlign='left';
+      ov.fillText(name, p.sx+r+3, p.sy-r-1);
+    }
+  }
+}
+function drawBlackHoles(date,W,H){
+  for (const [name, raH, decD] of BLACK_HOLES){
+    const { alt, az } = raDecToAltAz(date, raH, decD);
+    if (alt < -0.02) continue;
+    const v = altAzToVec(alt, az);
+    const p = projectVec(v, W, H);
+    if (!p) continue;
+    ov.beginPath(); ov.arc(p.sx,p.sy,4,0,2*Math.PI);
+    ov.fillStyle='#a78bfa'; ov.shadowColor='#a78bfa'; ov.shadowBlur=12; ov.fill(); ov.shadowBlur=0;
+    if (state.names){
+      ov.font='10px "Avenir Next", system-ui, sans-serif';
+      ov.fillStyle='rgba(167,139,250,0.85)'; ov.textAlign='left';
+      ov.fillText(name, p.sx+7, p.sy-5);
+    }
+  }
+}
+function drawAsteroids(date,W,H){
+  for (const el of ASTEROIDS){
+    let rd;
+    try { rd = asteroidGeocentricRaDec(el, date); } catch(_){ continue; }
+    const { alt, az } = raDecToAltAz(date, rd.ra, rd.dec);
+    if (alt < -0.02) continue;
+    const v = altAzToVec(alt, az);
+    const p = projectVec(v, W, H);
+    if (!p) continue;
+    ov.beginPath(); ov.arc(p.sx,p.sy,3,0,2*Math.PI);
+    ov.fillStyle='#fbbf24'; ov.shadowColor='#fbbf24'; ov.shadowBlur=8; ov.fill(); ov.shadowBlur=0;
+    ov.strokeStyle='rgba(251,191,36,0.6)'; ov.lineWidth=0.8; ov.stroke();
+    if (state.names){
+      ov.font='10px "Avenir Next", system-ui, sans-serif';
+      ov.fillStyle='rgba(251,191,36,0.85)'; ov.textAlign='left';
+      ov.fillText(el[0], p.sx+6, p.sy-4);
+    }
+  }
+}
+function drawGrid(date,W,H){
+  ov.lineWidth=0.5; ov.strokeStyle='rgba(103,232,249,0.20)'; ov.font='9px "Avenir Next", system-ui, sans-serif'; ov.fillStyle='rgba(103,232,249,0.55)';
+  for (let raH=0; raH<24; raH+=2){
+    const pts = [];
+    for (let dec=-80; dec<=80; dec+=4){
+      const { alt, az } = raDecToAltAz(date, raH, dec);
+      const v = altAzToVec(alt, az); const p = projectVec(v, W, H); if (p) pts.push(p);
+    }
+    if (pts.length>1){
+      ov.beginPath(); ov.moveTo(pts[0].sx, pts[0].sy);
+      for (let i=1; i<pts.length; i++) ov.lineTo(pts[i].sx, pts[i].sy);
+      ov.stroke();
+    }
+    if (pts.length){ const mid = pts[Math.floor(pts.length/2)]; if (mid) ov.fillText((raH+1)+'h', mid.sx+3, mid.sy-3); }
+  }
+  for (let dec=-75; dec<=75; dec+=15){
+    const pts = [];
+    for (let raH=0; raH<24; raH+=0.5){
+      const { alt, az } = raDecToAltAz(date, raH, dec);
+      const v = altAzToVec(alt, az); const p = projectVec(v, W, H); if (p) pts.push(p);
+    }
+    if (pts.length>1){
+      ov.beginPath(); ov.moveTo(pts[0].sx, pts[0].sy);
+      for (let i=1; i<pts.length; i++) ov.lineTo(pts[i].sx, pts[i].sy);
+      ov.stroke();
+    }
+    if (pts.length){ const mid = pts[Math.floor(pts.length/2)]; if (mid) ov.fillText(dec+'°', mid.sx+3, mid.sy-3); }
+  }
+}
+
+function drawReticle(cx, cy, hot){
+  const progress = getDwellProgress();
+  const uiHot = !!uiDwellTarget;
+
+  ov.beginPath(); 
+  ov.arc(cx, cy, (hot||uiHot) ? 22 : 12, 0, 2*Math.PI);
+  ov.strokeStyle = (hot||uiHot) ? '#ffc26b' : 'rgba(232,236,246,0.45)';
+  ov.lineWidth = (hot||uiHot) ? 2 : 1.2;
+  ov.stroke();
+
+  if (progress > 0) {
+    ov.beginPath();
+    ov.arc(cx, cy, 22, -Math.PI/2, -Math.PI/2 + (progress * 2 * Math.PI));
+    ov.strokeStyle = uiHot ? '#a78bfa' : '#ffc26b';
+    ov.lineWidth = 3;
+    ov.stroke();
+  }
+
+  ov.beginPath(); ov.arc(cx, cy, (hot||uiHot) ? 3.5 : 2, 0, 2*Math.PI);
+  ov.fillStyle = (hot||uiHot) ? '#ffc26b' : 'rgba(232,236,246,0.7)';
+  ov.fill();
+  
+  if (!hot && !uiHot && progress === 0){
+    ov.strokeStyle='rgba(232,236,246,0.35)'; ov.lineWidth=1;
+    for (const ang of [0,Math.PI/2,Math.PI,3*Math.PI/2]){
+      const x1=cx+Math.cos(ang)*16, y1=cy+Math.sin(ang)*16;
+      const x2=cx+Math.cos(ang)*20, y2=cy+Math.sin(ang)*20;
+      ov.beginPath(); ov.moveTo(x1,y1); ov.lineTo(x2,y2); ov.stroke();
+    }
+  }
+}
+
+function getDwellProgress() {
+  const gaze = state.gyro || state.stereo;
+  if (!gaze) return 0;
+  const now = performance.now();
+  if (uiDwellTarget) return Math.min((now - uiDwellStart) / 1000, 1);
+  if (state.hoverDwellTarget) return Math.min((now - state.hoverDwellStart) / 1500, 1);
+  return 0;
+}
+
+function hexToRgba(hex, a){
+  const h = hex.replace('#','');
+  return `rgba(${parseInt(h.substring(0,2),16)},${parseInt(h.substring(2,4),16)},${parseInt(h.substring(4,6),16)},${a})`;
+}
+
+function drawHoverHighlight(v, W, H) {
+  if (!state.hovered || uiDwellTarget) return;
+  const p = projectVec(v, W, H);
+  if (!p) return;
+  const color = state.hovered.color;
+  ov.beginPath(); ov.arc(p.sx, p.sy, 16, 0, 2*Math.PI);
+  ov.strokeStyle=color; ov.lineWidth=2; ov.stroke();
+  ov.beginPath(); ov.arc(p.sx, p.sy, 22, 0, 2*Math.PI);
+  ov.strokeStyle=hexToRgba(color, 0.35); ov.lineWidth=1; ov.stroke();
+}
+
+// --- INTERACTION ---
+let uiDwellStart = 0;
+let uiDwellTarget = null;
+
+function updateHover(){
+  const gaze = state.gyro || state.stereo;
+  let cx, cy, radius;
+  
+  if (gaze){
+    cx = window.innerWidth/2; cy = window.innerHeight/2;
+    
+    // 1. Check if gaze is on a DOM element
+    const el = document.elementFromPoint(cx, cy);
+    let gazeable = null;
+    if (el) {
+      if (el.tagName === 'BUTTON' || el.closest('button')) gazeable = el.closest('button');
+      else if (el.id === 'bar' || el.id === 'vr-menu-btn' || el.closest('.panel')) gazeable = el;
+    }
+    
+    if (gazeable && !$('bar').classList.contains('show') && !$('vr-menu-btn').contains(gazeable) && gazeable.id !== 'vr-menu-btn') {
+      gazeable = null;
+    }
+
+    if (gazeable) {
+      if (uiDwellTarget !== gazeable) {
+        uiDwellTarget = gazeable;
+        uiDwellStart = performance.now();
+        document.querySelectorAll('.vr-gaze').forEach(b => b.classList.remove('vr-gaze'));
+        gazeable.classList.add('vr-gaze');
+      } else if (performance.now() - uiDwellStart > 1000) {
+        gazeable.click();
+        uiDwellStart = performance.now() + 99999;
+        setTimeout(() => {
+          if (gazeable) gazeable.classList.remove('vr-gaze');
+          uiDwellTarget = null;
+        }, 300);
+      }
+      setHovered(null);
+      return;
+    } else {
+      if (uiDwellTarget) {
+        uiDwellTarget.classList.remove('vr-gaze');
+        uiDwellTarget = null;
+      }
+    }
+
+    // 2. Check entities using angular distance
+    radius = Math.cos(10 * DEG); // 10 degree cone
+  } else {
+    if (!state.pointerActive){ setHovered(null); return; }
+    cx = state.pointerX; cy = state.pointerY; radius = 30;
+  }
+
+  if (!PICK.length){ setHovered(null); return; }
+  
+  let best = null, bestD = radius;
+  for (const o of PICK){
+    if (gaze) {
+      // Dot product angular check
+      const dot = o.v[0]*F[0] + o.v[1]*F[1] + o.v[2]*F[2];
+      if (dot > bestD) { bestD = dot; best = o; }
+    } else {
+      // Screen distance check
+      const d = Math.hypot(o.sx-cx, o.sy-cy);
+      if (d < bestD){ bestD = d; best = o; }
+    }
+  }
+  setHovered(best);
+
+  // 3. VR Entity Dwell
+  if (best && gaze){
+    if (state.hoverDwellTarget !== best){
+      state.hoverDwellTarget = best;
+      state.hoverDwellStart = performance.now();
+    } else if (performance.now() - state.hoverDwellStart > 1500 && state.selected?.name !== best.name){
+      openInfoFor(best);
+      state.hoverDwellStart = performance.now() + 999999;
+    }
+  } else {
+    state.hoverDwellTarget = null;
+  }
+}
+
+function setHovered(o){
+  if (state.hovered === o){ if (o) positionTooltip(o); return; }
+  state.hovered = o;
+  if (!o){ tooltip.style.display = 'none'; return; }
+  renderTooltip(o);
+  positionTooltip(o);
+}
+function renderTooltip(o){
+  const rows = [];
+  if (o.extra){
+    if (o.extra.mag !== undefined) rows.push(['Mag', o.extra.mag]);
+    if (o.extra.distance) rows.push(['Dist', o.extra.distance]);
+    if (o.extra.spectral) rows.push(['Type', o.extra.spectral]);
+    if (o.extra.size) rows.push(['Size', o.extra.size]);
+    if (o.extra.diameter) rows.push(['Dia', o.extra.diameter]);
+    if (o.extra.illum) rows.push(['Illum', o.extra.illum]);
+  }
+  tooltip.innerHTML = `
+    <div class="tt-type">${o.type}</div>
+    <div class="tt-name">${o.name}</div>
+    ${rows.map(([k,v])=>`<div class="tt-row"><span class="k">${k}</span><span>${v}</span></div>`).join('')}
+    <div class="tt-hint">${state.gyro||state.stereo ? 'Gaze dwell to open' : 'Tap to open · ask AI'}</div>
+  `;
+  tooltip.style.display = 'block';
+}
+function positionTooltip(o){
+  const gaze = state.gyro || state.stereo;
+  if (gaze){
+    tooltip.style.left = '50%';
+    tooltip.style.top = '50%';
+    tooltip.style.transform = 'translate(-50%, -100%) translateY(-40px)';
+  } else {
+    let x = state.pointerX + 18;
+    let y = state.pointerY + 18;
+    const rect = tooltip.getBoundingClientRect();
+    if (x + rect.width + 16 > window.innerWidth) x = state.pointerX - rect.width - 18;
+    if (y + rect.height + 16 > window.innerHeight) y = state.pointerY - rect.height - 18;
+    tooltip.style.left = x + 'px';
+    tooltip.style.top = y + 'px';
+    tooltip.style.transform = 'none';
+  }
+}
+
+function showInfo(name, type, extra = {}){
+  state.selected = { name, type };
+  infoName.textContent = name;
+  infoType.textContent = type;
+  infoPanel.classList.add('open');
+
+  const renderRows = (obj) => {
+    infoBody.innerHTML = Object.entries(obj)
+      .filter(([,v]) => v !== undefined && v !== null && v !== '')
+      .map(([k,v]) => `<div class="row"><span class="k">${k}</span><span class="v">${v}</span></div>`)
+      .join('') + (obj.desc ? `<div class="desc">${obj.desc}</div>` : '');
+  };
+
+  if (PLANET_FACTS[name]){
+    const f = PLANET_FACTS[name];
+    renderRows({
+      'Mean radius': f.radius, 'Mass': f.mass, 'Day length': f.day,
+      'Orbital period': f.year, 'Moons': f.moons, 'Temperature': f.temp,
+      ...extra, desc: f.desc
+    });
+  } else {
+    renderRows({ ...extra });
+  }
+  loadAIOverview(name, type, extra);
+}
+
+$('info-close').addEventListener('click', () => {
+  infoPanel.classList.remove('open');
+  state.selected = null;
+});
+
+function openInfoFor(o){
+  const extra = { ...o.extra };
+  if (o.type === 'Planet'){
+    const bodyMap = { Sun:Astronomy.Body.Sun, Moon:Astronomy.Body.Moon, Mercury:Astronomy.Body.Mercury, Venus:Astronomy.Body.Venus, Mars:Astronomy.Body.Mars, Jupiter:Astronomy.Body.Jupiter, Saturn:Astronomy.Body.Saturn, Uranus:Astronomy.Body.Uranus, Neptune:Astronomy.Body.Neptune };
+    const body = bodyMap[o.name];
+    if (body){
+      try {
+        const eq = Astronomy.Equator(body, state.observerDate, OBSERVER, true, true);
+        if (eq.dist) extra['Distance from Earth'] = (eq.dist*149597870.7).toLocaleString(undefined,{maximumFractionDigits:0}) + ' km';
+        extra['RA'] = eq.ra.toFixed(2) + ' h';
+        extra['Dec'] = eq.dec.toFixed(1) + '°';
+        if (o.name !== 'Sun' && o.name !== 'Moon'){
+          const ill = Astronomy.Illumination(body, state.observerDate);
+          extra['Apparent mag'] = ill.mag.toFixed(1);
+        }
+      } catch(_){}
+    }
+  }
+  showInfo(o.name, o.type, extra);
+}
+
+const GROQ_KEY_STORAGE = 'skyvr_groq_key';
+let groqKey = localStorage.getItem(GROQ_KEY_STORAGE) || '';
+const GROQ_MODEL = 'openai/gpt-oss-20b'; 
+const AI_CACHE = {};
+let aiAbort = null;
+
+async function askGroq(messages, onChunk){
+  if (!groqKey) throw new Error('No Groq API key. Tap 🤖 in the toolbar to add one.');
+  if (aiAbort) aiAbort.abort();
+  aiAbort = new AbortController();
+
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${groqKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: GROQ_MODEL, messages, max_tokens: 300, temperature: 0.65, stream: !!onChunk }),
+    signal: aiAbort.signal
+  });
+
+  if (!res.ok){
+    const t = await res.text().catch(() => '');
+    throw new Error(`Groq ${res.status}: ${t.slice(0,180)}`);
+  }
+
+  if (!onChunk){
+    const j = await res.json();
+    return j.choices?.[0]?.message?.content || '';
+  }
+
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let text = '', buffer = '';
+  while (true){
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += dec.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop();
+    for (const line of lines){
+      if (!line.startsWith('data: ')) continue;
+      const data = line.slice(6).trim();
+      if (data === '[DONE]') continue;
+      try {
+        const j = JSON.parse(data);
+        const delta = j.choices?.[0]?.delta?.content;
+        if (delta){ text += delta; onChunk(text); }
+      } catch(_) {}
+    }
+  }
+  return text;
+}
+
+const SYS_OVERVIEW = `You are a friendly astronomy guide in a live planetarium app used by amateur stargazers in Shahdol, India. Give a 2-3 sentence overview of the object. Include ONE specific number (distance, size, temperature, or magnitude). Never say "as an AI", never use markdown, never use bullet points. Plain prose only.`;
+const SYS_QA = `You are an astronomy expert answering a curious stargazer. Answer the question in 1-2 sentences, direct and factual. No markdown, no lists. Plain prose.`;
+
+async function loadAIOverview(name, type, extra){
+  const key = name.toLowerCase();
+  aiContent.innerHTML = '';
+  aiStatus.textContent = 'Thinking…';
+  aiContent.innerHTML = '<span class="ai-hint">Generating overview…</span>';
+
+  if (AI_CACHE[key]){
+    aiContent.textContent = AI_CACHE[key];
+    aiStatus.textContent = 'Overview';
+    return;
+  }
+
+  if (!groqKey){
+    aiContent.innerHTML = '<span class="ai-hint">Tap 🤖 in the toolbar to add your Groq API key, then AI overviews will appear here.</span>';
+    aiStatus.textContent = 'No key';
+    return;
+  }
+
+  let ctx = `Object: ${name}. Type: ${type}.`;
+  if (extra){
+    if (extra.distance) ctx += ` Distance: ${extra.distance}.`;
+    if (extra.mag !== undefined) ctx += ` Magnitude: ${extra.mag}.`;
+    if (extra.diameter) ctx += ` Diameter: ${extra.diameter}.`;
+    if (extra.spectral) ctx += ` Spectral type: ${extra.spectral}.`;
+    if (extra.size) ctx += ` Angular size: ${extra.size}.`;
+    if (extra.illum) ctx += ` Illumination: ${extra.illum}.`;
+  }
+
+  try {
+    const messages = [
+      { role: 'system', content: SYS_OVERVIEW },
+      { role: 'user', content: ctx + ` Write the overview now.` }
+    ];
+    const result = await askGroq(messages, (partial) => {
+      aiContent.textContent = partial;
+      aiStatus.textContent = 'Streaming…';
+    });
+    AI_CACHE[key] = result;
+    aiStatus.textContent = 'Overview';
+  } catch (e){
+    if (e.name === 'AbortError') return;
+    aiContent.innerHTML = `<span class="ai-error">${e.message}</span>`;
+    aiStatus.textContent = 'Error';
+  }
+}
+
+async function askAboutEntity(question){
+  if (!state.selected) return;
+  const { name, type } = state.selected;
+  aiStatus.textContent = 'Answering…';
+  aiContent.innerHTML = '<span class="ai-hint">Thinking…</span>';
+
+  if (!groqKey){
+    aiContent.innerHTML = '<span class="ai-hint">Add a Groq API key via 🤖 to use AI questions.</span>';
+    aiStatus.textContent = 'No key';
+    return;
+  }
+
+  try {
+    const messages = [
+      { role: 'system', content: SYS_QA + ` You are looking at ${name} (${type}) from Shahdol, India.` },
+      { role: 'user', content: question }
+    ];
+    await askGroq(messages, (partial) => {
+      aiContent.textContent = partial;
+    });
+    aiStatus.textContent = 'Answer';
+  } catch (e){
+    if (e.name === 'AbortError') return;
+    aiContent.innerHTML = `<span class="ai-error">${e.message}</span>`;
+    aiStatus.textContent = 'Error';
+  }
+}
+
+let speechRec = null;
+function initSpeech(){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return null;
+  const rec = new SR();
+  rec.lang = 'en-IN'; rec.continuous = false; rec.interimResults = false; rec.maxAlternatives = 1;
+  return rec;
+}
+function startVoiceQuery(){
+  if (!state.selected){
+    aiContent.innerHTML = '<span class="ai-hint">Open an object first, then tap 🎤.</span>';
+    return;
+  }
+  speechRec = speechRec || initSpeech();
+  if (!speechRec){
+    aiContent.innerHTML = '<span class="ai-error">Speech recognition not supported.</span>';
+    return;
+  }
+  speechRec.onresult = (e) => {
+    const text = e.results[0][0].transcript;
+    aiInput.value = text;
+    btnMic.classList.remove('recording');
+    askAboutEntity(text);
+  };
+  speechRec.onerror = (e) => {
+    btnMic.classList.remove('recording');
+    if (e.error !== 'aborted') aiContent.innerHTML = `<span class="ai-error">Voice error: ${e.error}</span>`;
+  };
+  speechRec.onend = () => btnMic.classList.remove('recording');
+  try {
+    speechRec.start();
+    btnMic.classList.add('recording');
+    aiContent.innerHTML = '<span class="ai-hint">Listening…</span>';
+    aiStatus.textContent = 'Listening';
+  } catch (e){
+    btnMic.classList.remove('recording');
+    aiContent.innerHTML = `<span class="ai-error">${e.message}</span>`;
+  }
+}
+
+btnMic.addEventListener('click', startVoiceQuery);
+btnAsk.addEventListener('click', () => {
+  const q = aiInput.value.trim();
+  if (!q) return;
+  askAboutEntity(q);
+  aiInput.value = '';
+});
+aiInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter'){ e.preventDefault(); btnAsk.click(); }
+});
+
+let W = 0, H = 0;
+const MAX_DPR = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? 1.5 : 2;
+function resize(){
+  const dpr = Math.min(window.devicePixelRatio||1, MAX_DPR);
+  const w = Math.max(1, Math.round(glCanvas.clientWidth*dpr));
+  const h = Math.max(1, Math.round(glCanvas.clientHeight*dpr));
+  if (w!==W || h!==H){ W=w; H=h; glCanvas.width=W; glCanvas.height=H; }
+}
+const sunV=[0,0,0], moonV=[0,0,0];
+function sunDirAt(date,out){
+  const eq = Astronomy.Equator(Astronomy.Body.Sun, date, OBSERVER, true, true);
+  const { alt, az } = raDecToAltAz(date, eq.ra, eq.dec);
+  const v = altAzToVec(alt, az);
+  out[0]=v[0]; out[1]=v[1]; out[2]=v[2]; return out;
+}
+function moonDirAt(date,out){
+  const eq = Astronomy.Equator(Astronomy.Body.Moon, date, OBSERVER, true, true);
+  const { alt, az } = raDecToAltAz(date, eq.ra, eq.dec);
+  const v = altAzToVec(alt, az);
+  out[0]=v[0]; out[1]=v[1]; out[2]=v[2]; return out;
+}
+function toeInF(f, r, a){
+  const c = Math.cos(a), s = Math.sin(a);
+  const out = [f[0]*c + r[0]*s, f[1]*c + r[1]*s, f[2]*c + r[2]*s];
+  const L = Math.hypot(out[0],out[1],out[2]) || 1;
+  return [out[0]/L, out[1]/L, out[2]/L];
+}
+
+// --- WEBGL RENDERER (Fixed Stereo) ---
+function renderGL(now){
+  resize();
+  if (state.gyro && gyroQ) applyGyroBasis();
+  else basisFromYawPitch();
+  const date = state.observerDate;
+  sunDirAt(date, sunV);
+  moonDirAt(date, moonV);
+  gl.useProgram(prog);
+
+  if (state.stereo) {
+    const halfW = Math.floor(W/2);
+    const scale = vrState.scale;
+    const vW = Math.floor(halfW * scale);
+    const vH = Math.floor(H * scale);
+    const shiftX = Math.floor(vrState.ipdOffset * (W/800));
+    const shiftY = Math.floor(vrState.vOffset * (H/800));
+
+    // Left Eye
+    let lx = shiftX + Math.floor((halfW - vW)/2);
+    let ly = shiftY + Math.floor((H - vH)/2);
+    gl.viewport(lx, ly, vW, vH);
+    gl.uniform2f(U.uRes, vW, vH);
+    
+    const lf = toeInF(F, R, 0.011);
+    gl.uniform3f(U.uFwd, lf[0], lf[1], lf[2]);
+    gl.uniform3f(U.uRight, R[0], R[1], R[2]);
+    gl.uniform3f(U.uUp, UP[0], UP[1], UP[2]);
+    gl.uniform3f(U.uSun, sunV[0], sunV[1], sunV[2]);
+    gl.uniform3f(U.uMoon, moonV[0], moonV[1], moonV[2]);
+    gl.uniform1f(U.uTanHalf, Math.tan(state.fov*0.5*DEG));
+    gl.uniform1f(U.uTime, (now-startTime)*0.001);
+    gl.uniform1f(U.uCloud, state.cloud);
+    gl.uniform1f(U.uGround, state.ground ? 1 : 0);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    // Right Eye
+    let rx = halfW + shiftX + Math.floor((halfW - vW)/2);
+    let ry = shiftY + Math.floor((H - vH)/2);
+    gl.viewport(rx, ry, vW, vH);
+    gl.uniform2f(U.uRes, vW, vH);
+    
+    const rf = toeInF(F, R, -0.011);
+    gl.uniform3f(U.uFwd, rf[0], rf[1], rf[2]);
+    gl.uniform3f(U.uRight, R[0], R[1], R[2]);
+    gl.uniform3f(U.uUp, UP[0], UP[1], UP[2]);
+    gl.uniform3f(U.uSun, sunV[0], sunV[1], sunV[2]);
+    gl.uniform3f(U.uMoon, moonV[0], moonV[1], moonV[2]);
+    gl.uniform1f(U.uTanHalf, Math.tan(state.fov*0.5*DEG));
+    gl.uniform1f(U.uTime, (now-startTime)*0.001);
+    gl.uniform1f(U.uCloud, state.cloud);
+    gl.uniform1f(U.uGround, state.ground ? 1 : 0);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    // Reset
+    gl.viewport(0,0,W,H);
+    gl.uniform2f(U.uRes, W, H);
+    gl.uniform3f(U.uFwd, F[0], F[1], F[2]);
+  } else {
+    gl.viewport(0,0,W,H);
+    gl.uniform2f(U.uRes, W, H);
+    gl.uniform3f(U.uFwd, F[0], F[1], F[2]);
+    gl.uniform3f(U.uRight, R[0], R[1], R[2]);
+    gl.uniform3f(U.uUp, UP[0], UP[1], UP[2]);
+    gl.uniform3f(U.uSun, sunV[0], sunV[1], sunV[2]);
+    gl.uniform3f(U.uMoon, moonV[0], moonV[1], moonV[2]);
+    gl.uniform1f(U.uTanHalf, Math.tan(state.fov*0.5*DEG));
+    gl.uniform1f(U.uTime, (now-startTime)*0.001);
+    gl.uniform1f(U.uCloud, state.cloud);
+    gl.uniform1f(U.uGround, state.ground ? 1 : 0);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+}
+
+function buildDate(){
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
+  const hh = Math.floor(state.hour);
+  const mm = Math.round((state.hour - hh) * 60);
+  return new Date(y, m, d, hh, mm, 0, 0);
+}
+function updateObserverDate(){
+  state.observerDate = buildDate();
+  const h = state.hour;
+  const hh = Math.floor(h) % 24;
+  const mm = Math.floor((h - Math.floor(h))*60);
+  elTime.textContent = String(hh).padStart(2,'0') + ':' + String(mm).padStart(2,'0');
+  slider.value = state.hour.toFixed(2);
+}
+function onOrient(e){
+  if (e.alpha == null || e.beta == null || e.gamma == null) return;
+  const a = e.alpha*DEG, b = e.beta*DEG, g = e.gamma*DEG;
+  const so = (screen.orientation && typeof screen.orientation.angle === 'number')
+    ? screen.orientation.angle : (window.orientation || 0);
+  const sa = so*DEG;
+  let q = eulerYXZ(b, a, -g);
+  q = qmul(q, { x:-Math.SQRT1_2, y:0, z:0, w:Math.SQRT1_2 });
+  q = qmul(q, { x:0, y:0, z:Math.sin(-sa/2), w:Math.cos(-sa/2) });
+  gyroQ = q;
+}
+async function toggleGyro(){
+  if (state.gyro){
+    state.gyro = false;
+    window.removeEventListener('deviceorientation', onOrient, true);
+    $('b-gyro').classList.remove('on');
+    return;
+  }
+  try {
+    const DOE = window.DeviceOrientationEvent;
+    if (DOE && typeof DOE.requestPermission === 'function'){
+      const res = await DOE.requestPermission();
+      if (res !== 'granted'){ setupMsg.textContent = 'Gyro permission denied'; return; }
+    }
+  } catch(_){}
+  if (!('DeviceOrientationEvent' in window)) return;
+  window.addEventListener('deviceorientation', onOrient, true);
+  state.gyro = true;
+  $('b-gyro').classList.add('on');
+  state.pointerActive = false;
+}
+
+const pointers = new Map();
+let pinchStart = 0, dragMoved = false, lastTapTime = 0;
+function pinchDist(){
+  const pts = [...pointers.values()];
+  if (pts.length < 2) return 0;
+  return Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
+}
+glCanvas.addEventListener('pointerdown', e => {
+  try { glCanvas.setPointerCapture(e.pointerId); } catch(_){}
+  pointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
+  if (pointers.size === 2) pinchStart = pinchDist();
+  dragMoved = false;
+  touched();
+});
+glCanvas.addEventListener('pointermove', e => {
+  state.pointerX = e.clientX;
+  state.pointerY = e.clientY;
+  state.pointerActive = true;
+  const p = pointers.get(e.pointerId);
+  if (!p) return;
+  const dx = e.clientX - p.x, dy = e.clientY - p.y;
+  p.x = e.clientX; p.y = e.clientY;
+  if (Math.abs(dx) > 2 || Math.abs(dy) > 2) dragMoved = true;
+  if (state.gyro || state.stereo) return;
+  if (pointers.size === 1){
+    const k = (state.fov*DEG) / Math.max(1, glCanvas.clientHeight);
+    state.yaw   -= dx * k;
+    state.pitch  = clamp(state.pitch + dy * k, -1.55, 1.55);
+  } else if (pointers.size === 2){
+    const d = pinchDist();
+    if (pinchStart > 0 && d > 0){
+      state.fov = clamp(state.fov * (pinchStart/d), 25, 110);
+      pinchStart = d;
+    }
+  }
+  touched();
+});
+function endPointer(e){
+  if (pointers.size === 1 && !dragMoved){
+    const now = performance.now();
+    const isDouble = now - lastTapTime < 320;
+    lastTapTime = now;
+    if (isDouble) toggleVR();
+    else {
+      const hit = nearestPick(e.clientX, e.clientY, 34);
+      if (hit) openInfoFor(hit);
+    }
+  }
+  pointers.delete(e.pointerId);
+  if (pointers.size < 2) pinchStart = 0;
+  if (pointers.size === 0) dragMoved = false;
+}
+glCanvas.addEventListener('pointerup', endPointer);
+glCanvas.addEventListener('pointercancel', endPointer);
+glCanvas.addEventListener('contextmenu', e => e.preventDefault());
+function nearestPick(x, y, r){
+  let best = null, bestD = r;
+  for (const o of PICK){
+    const d = Math.hypot(o.sx-x, o.sy-y);
+    if (d < bestD){ bestD = d; best = o; }
+  }
+  return best;
+}
+glCanvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  state.fov = clamp(state.fov + Math.sign(e.deltaY)*3, 25, 110);
+  touched();
+}, { passive:false });
+
+let last = 0, startTime = performance.now(), idleSince = startTime;
+let fpsFrames = 0, fpsAcc = 0, overlayTimer = 0;
+function touched(){ idleSince = performance.now(); }
+function loop(now){
+  const dt = last ? Math.min((now-last)/1000, 0.1) : 0.016;
+  last = now;
+  if (state.cycle){
+    state.hour = (state.hour + dt*0.55) % 24;
+    updateObserverDate();
+  }
+  if (state.drift && !state.gyro && !state.stereo && now - idleSince > 1800){
+    state.yaw += dt * 0.05;
+  }
+  renderGL(now);
+  if (now - overlayTimer > 90){
+    overlayTimer = now;
+    drawOverlay(state.observerDate);
+    rebuildPickList(state.observerDate);
+    updateHover();
+  }
+  if (now - (loop._hud||0) > 150){
+    loop._hud = now;
+    const hdg = (Math.atan2(F[0], -F[2])*RAD + 360) % 360;
+    const pit = Math.asin(clamp(F[1],-1,1))*RAD;
+    const el  = Math.asin(clamp(sunV[1],-1,1))*RAD;
+    elHdg.textContent = String(Math.round(hdg)).padStart(3,'0')+'°';
+    elPit.textContent = (pit>=0?'+':'−')+String(Math.abs(Math.round(pit))).padStart(2,'0')+'°';
+    elSun.textContent = (el>=0?'+':'−')+String(Math.abs(Math.round(el))).padStart(2,'0')+'°';
+  }
+  fpsFrames++; fpsAcc += dt;
+  if (fpsAcc >= 0.5){
+    elFps.textContent = String(Math.round(fpsFrames/fpsAcc));
+    fpsFrames = 0; fpsAcc = 0;
+  }
+  requestAnimationFrame(loop);
+}
+
+async function toggleVR(){
+  state.stereo = !state.stereo;
+  $('b-vr').classList.toggle('on', state.stereo);
+  document.body.classList.toggle('vr', state.stereo);
+  $('bar').classList.remove('show');
+  
+  if (state.stereo){
+    if (state.fov > 85) state.fov = 85;
+    try { if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape').catch(()=>{}); } catch(_){}
+    
+    // Auto Fullscreen for VR
+    if (document.documentElement.requestFullscreen) {
+      document.documentElement.requestFullscreen().catch(()=>{});
+    }
+    
+    infoPanel.classList.remove('open');
+    $('vr-menu-btn').click();
+  } else {
+    try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch(_){}
+    $('bar').classList.remove('show');
+  }
+}
+$('vr-menu-btn').addEventListener('click', () => {
+  $('bar').classList.toggle('show');
+  uiDwellStart = performance.now() + 1000; 
+  uiDwellTarget = null;
+});
+$('b-close-vr-menu').addEventListener('click', () => {
+  $('bar').classList.remove('show');
+});
+
+function toggleFull(){
+  const d = document;
+  if (!d.fullscreenElement){
+    (d.documentElement.requestFullscreen || d.documentElement.webkitRequestFullscreen || (()=>{})).call(d.documentElement);
+  } else {
+    (d.exitFullscreen || d.webkitExitFullscreen || (()=>{})).call(d);
+  }
+}
+function toggleGround(){ state.ground = !state.ground; $('b-ground').classList.toggle('on', state.ground); }
+function toggleGrid(){ state.grid = !state.grid; $('b-grid').classList.toggle('on', state.grid); }
+function toggleNames(){ state.names = !state.names; $('b-names').classList.toggle('on', state.names); }
+function resetView(){
+  state.yaw = DEFAULT.yaw; state.pitch = DEFAULT.pitch; state.fov = DEFAULT.fov;
+  state.hour = DEFAULT.hour; state.cycle = true; state.drift = true;
+  state.ground = true; state.grid = true; state.names = true;
+  ['b-cycle','b-drift','b-ground','b-grid','b-names'].forEach(id => $(id).classList.add('on'));
+  infoPanel.classList.remove('open');
+  updateObserverDate(); touched();
+}
+$('b-cycle').addEventListener('click', e => {
+  state.cycle = !state.cycle; e.currentTarget.classList.toggle('on', state.cycle);
+});
+$('b-drift').addEventListener('click', e => {
+  state.drift = !state.drift; e.currentTarget.classList.toggle('on', state.drift); touched();
+});
+$('b-ground').addEventListener('click', toggleGround);
+$('b-grid').addEventListener('click', toggleGrid);
+$('b-names').addEventListener('click', toggleNames);
+$('b-now').addEventListener('click', () => {
+  const now = new Date();
+  state.hour = now.getHours() + now.getMinutes()/60;
+  state.cycle = false; $('b-cycle').classList.remove('on');
+  updateObserverDate();
+});
+$('b-gyro').addEventListener('click', toggleGyro);
+$('b-vr').addEventListener('click', toggleVR);
+$('b-full').addEventListener('click', toggleFull);
+$('b-loc').addEventListener('click', () => openSetup());
+$('b-ai').addEventListener('click', () => openSettings());
+$('b-calib').addEventListener('click', () => vrCalibModal.classList.remove('gone'));
+$('b-reset').addEventListener('click', resetView);
+slider.addEventListener('input', () => {
+  state.hour = parseFloat(slider.value) || 0;
+  state.cycle = false; $('b-cycle').classList.remove('on');
+  updateObserverDate();
+});
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', () => setTimeout(resize, 250));
+
+function openSetup(){
+  $('inp-lat').value = OBSERVER.latitude.toFixed(4);
+  $('inp-lon').value = OBSERVER.longitude.toFixed(4);
+  $('inp-alt').value = OBSERVER.height ?? 0;
+  $('inp-loc').value = OBSERVER_LABEL;
+  const now = new Date();
+  $('inp-date').value = now.toISOString().slice(0,10);
+  $('inp-time').value = String(Math.floor(state.hour)).padStart(2,'0') + ':' + String(Math.floor((state.hour%1)*60)).padStart(2,'0');
+  setupModal.classList.remove('gone');
+}
+function closeSetup(){ setupModal.classList.add('gone'); }
+function commitSetup(){
+  const lat = parseFloat($('inp-lat').value);
+  const lon = parseFloat($('inp-lon').value);
+  const alt = parseFloat($('inp-alt').value) || 0;
+  if (!isFinite(lat) || !isFinite(lon) || lat < -89.9 || lat > 89.9 || lon < -180 || lon > 180){
+    setupMsg.textContent = 'Please enter valid coordinates.';
+    setupMsg.className = 'msg'; return;
+  }
+  OBSERVER = new Astronomy.Observer(lat, lon, alt);
+  OBSERVER_LABEL = ($('inp-loc').value || `${lat.toFixed(2)},${lon.toFixed(2)}`).split(',')[0].trim().toUpperCase();
+  elLoc.textContent = OBSERVER_LABEL.substring(0,10);
+  const t = $('inp-time').value || '19:15';
+  const [hh, mm] = t.split(':').map(Number);
+  state.hour = (hh || 0) + (mm || 0) / 60;
+  setupMsg.textContent = ''; setupMsg.className = 'msg';
+  updateObserverDate();
+  closeSetup(); touched();
+}
+async function searchLocation(query){
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`;
+    const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+    if (!res.ok) return null;
+    const list = await res.json();
+    if (!list.length) return null;
+    return { lat: parseFloat(list[0].lat), lon: parseFloat(list[0].lon), name: list[0].display_name };
+  } catch(_){ return null; }
+}
+async function reverseGeocode(lat, lon){
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`;
+    const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+    if (!res.ok) return null;
+    const d = await res.json();
+    return d.display_name || `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+  } catch(_){ return null; }
+}
+async function detectLocation(){
+  setupMsg.textContent = 'Requesting location…'; setupMsg.className = 'msg';
+  if (!navigator.geolocation){
+    setupMsg.textContent = 'Geolocation not supported.'; setupMsg.className = 'msg'; return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    async (pos) => {
+      const { latitude, longitude, altitude } = pos.coords;
+      $('inp-lat').value = latitude.toFixed(4);
+      $('inp-lon').value = longitude.toFixed(4);
+      if (altitude != null) $('inp-alt').value = Math.round(altitude);
+      const name = await reverseGeocode(latitude, longitude);
+      if (name) $('inp-loc').value = name;
+      setupMsg.textContent = 'Location detected.'; setupMsg.className = 'msg ok';
+    },
+    (err) => {
+      setupMsg.textContent = 'Location error: ' + err.message; setupMsg.className = 'msg';
+    },
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+  );
+}
+async function searchAndFill(){
+  const query = $('inp-loc').value.trim();
+  if (!query || query.length < 2) return;
+  setupMsg.textContent = 'Searching…'; setupMsg.className = 'msg';
+  const hit = await searchLocation(query);
+  if (hit){
+    $('inp-lat').value = hit.lat.toFixed(4);
+    $('inp-lon').value = hit.lon.toFixed(4);
+    $('inp-loc').value = hit.name;
+    setupMsg.textContent = 'Found: ' + hit.name.split(',')[0]; setupMsg.className = 'msg ok';
+  } else {
+    setupMsg.textContent = 'Location not found. Enter coordinates manually.'; setupMsg.className = 'msg';
+  }
+}
+$('btn-start').addEventListener('click', commitSetup);
+$('btn-defaults').addEventListener('click', () => {
+  $('inp-loc').value = 'Shahdol, India';
+  $('inp-lat').value = '23.2936';
+  $('inp-lon').value = '81.3619';
+  $('inp-alt').value = '468';
+  const now = new Date();
+  $('inp-date').value = now.toISOString().slice(0,10);
+  $('inp-time').value = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+  setupMsg.textContent = 'Shahdol defaults loaded.'; setupMsg.className = 'msg ok';
+});
+$('detect').addEventListener('click', detectLocation);
+$('inp-loc').addEventListener('keydown', e => {
+  if (e.key === 'Enter'){ e.preventDefault(); searchAndFill(); }
+});
+
+function openSettings(){
+  $('inp-groq').value = groqKey;
+  settingsMsg.textContent = ''; settingsMsg.className = 'msg';
+  settingsModal.classList.remove('gone');
+}
+$('btn-save-key').addEventListener('click', () => {
+  const k = $('inp-groq').value.trim();
+  if (k && !k.startsWith('gsk_')) {
+    settingsMsg.textContent = 'Groq keys usually start with "gsk_". Save anyway?'; settingsMsg.className = 'msg';
+  }
+  groqKey = k;
+  localStorage.setItem(GROQ_KEY_STORAGE, groqKey);
+  settingsMsg.textContent = groqKey ? 'Saved.' : 'Cleared.'; settingsMsg.className = 'msg ok';
+  setTimeout(() => settingsModal.classList.add('gone'), 500);
+});
+$('btn-clear-key').addEventListener('click', () => {
+  groqKey = '';
+  localStorage.removeItem(GROQ_KEY_STORAGE);
+  $('inp-groq').value = '';
+  settingsMsg.textContent = 'Cleared.'; settingsMsg.className = 'msg ok';
+});
+
+$('ipd-slider').addEventListener('input', e => {
+  vrState.ipdOffset = parseInt(e.target.value);
+  $('ipd-val').textContent = vrState.ipdOffset;
+});
+$('voff-slider').addEventListener('input', e => {
+  vrState.vOffset = parseInt(e.target.value);
+  $('voff-val').textContent = vrState.vOffset;
+});
+$('scale-slider').addEventListener('input', e => {
+  vrState.scale = parseFloat(e.target.value);
+  $('scale-val').textContent = vrState.scale.toFixed(1) + 'x';
+});
+$('btn-calib-close').addEventListener('click', () => vrCalibModal.classList.add('gone'));
+
+updateObserverDate();
+elLoc.textContent = OBSERVER_LABEL.toUpperCase().substring(0,10);
+const now = new Date();
+$('inp-date').value = now.toISOString().slice(0,10);
+$('inp-time').value = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+requestAnimationFrame(now => {
+  renderGL(now);
+  drawOverlay(state.observerDate);
+  requestAnimationFrame(() => {
+    veil.classList.add('gone');
+    requestAnimationFrame(loop);
+  });
+});
+</script>
+</body>
+</html>
